@@ -1,0 +1,36 @@
+name: nkg
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.10.8
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  supabase_flutter: ^2.12.0
+  url_launcher: ^6.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/branding/nkg_logo.png
+    - assets/branding/company_logo.png
+    - assets/branding/company_logo_transparent.png
+    - assets/branding/nkg_auth_background_dark.png
+    - assets/branding/nkg_auth_background_light.png
+    - assets/branding/waterpark_logo.png
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/branding/Roboto-Regular.ttf
+        - asset: assets/branding/Roboto-Bold.ttf
+          weight: 700
