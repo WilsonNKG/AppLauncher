@@ -31,6 +31,13 @@ Future<bool> launchLocalApp({
     return launchUrl(Uri.parse(webUrl), mode: LaunchMode.externalApplication);
   }
 
+  // Waterpark requires the one-time launcher ticket in the URL. Opening its
+  // local bundle would discard that ticket, so use the authorised web entry
+  // point for this application.
+  if (appId == 'waterpark') {
+    return launchUrl(Uri.parse(webUrl), mode: LaunchMode.externalApplication);
+  }
+
   if (Platform.isMacOS) {
     final bundle = appId == 'waterpark'
         ? _waterparkMacBundle

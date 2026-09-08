@@ -1402,7 +1402,30 @@ class _LauncherPageState extends State<LauncherPage> {
   }
 
   Future<void> _openApp(LauncherApp app) async {
-    if (!await launchLocalApp(appId: app.id, webUrl: app.launchUrl)) {
+    var launchUrl = app.launchUrl;
+
+    if (!widget.demoMode && app.id == 'waterpark') {
+      try {
+        final ticket = await Supabase.instance.client.rpc(
+          'create_launcher_ticket',
+          params: {'p_app_slug': app.id},
+        );
+        final ticketValue = ticket.toString().trim();
+        if (ticketValue.isEmpty) throw const FormatException('Empty launch ticket');
+
+        final separator = launchUrl.contains('?') ? '&' : '?';
+        launchUrl = '$launchUrl${separator}launcher_ticket=${Uri.encodeComponent(ticketValue)}';
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Waterpark could not be authorised.')),
+          );
+        }
+        return;
+      }
+    }
+
+    if (!await launchLocalApp(appId: app.id, webUrl: launchUrl)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('The application could not be opened.')),

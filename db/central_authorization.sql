@@ -654,3 +654,95 @@ on conflict do nothing;
 -- Assign the first admin manually after creating the user:
 -- insert into public.nkg_user_roles (user_id, role_id)
 -- select 'AUTH_USER_UUID', id from public.nkg_roles where name = 'Master';
+
+-- Secure one-time handoff from the launcher to a child application.
+-- The child application must validate this ticket before showing its UI.
+create table if not exists public.nkg_launcher_tickets (
+  token text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  app_id uuid not null references public.launcher_apps(id) on delete cascade,
+  expires_at timestamptz not null default (now() + interval '2 minutes'),
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists nkg_launcher_tickets_expiry_idx
+  on public.nkg_launcher_tickets (expires_at);
+
+alter table public.nkg_launcher_tickets enable row level security;
+
+create or replace function public.create_launcher_ticket(p_app_slug text)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_token text := encode(gen_random_bytes(32), 'hex');
+  v_app_id uuid;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  select a.id into v_app_id
+  from public.launcher_apps a
+  where a.slug = p_app_slug and a.status = 'active';
+
+  if v_app_id is null or not exists (
+    select 1
+    from public.nkg_user_roles ur
+    join public.nkg_role_permissions rp on rp.role_id = ur.role_id
+    join public.nkg_permissions p on p.id = rp.permission_id
+    where ur.user_id = auth.uid()
+      and p.app_id = v_app_id
+      and p.permission_key = p_app_slug || '.access'
+  ) then
+    raise exception 'Application access denied';
+  end if;
+
+  insert into public.nkg_launcher_tickets (token, user_id, app_id)
+  values (v_token, auth.uid(), v_app_id);
+
+  return v_token;
+end;
+$$;
+
+create or replace function public.consume_launcher_ticket(
+  p_ticket text,
+  p_app_slug text
+)
+returns table (user_id uuid, user_email text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_user_id uuid;
+begin
+  update public.nkg_launcher_tickets t
+  set used_at = now()
+  where t.token = trim(p_ticket)
+    and t.used_at is null
+    and t.expires_at > now()
+    and t.app_id = (
+      select a.id from public.launcher_apps a
+      where a.slug = p_app_slug and a.status = 'active'
+    )
+  returning t.user_id into v_user_id;
+
+  if v_user_id is null then
+    return;
+  end if;
+
+  return query
+  select u.id, u.email::text
+  from auth.users u
+  where u.id = v_user_id;
+end;
+$$;
+
+revoke all on function public.create_launcher_ticket(text) from public;
+grant execute on function public.create_launcher_ticket(text) to authenticated;
+revoke all on function public.consume_launcher_ticket(text, text) from public;
+grant execute on function public.consume_launcher_ticket(text, text) to anon, authenticated;
